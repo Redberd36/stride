@@ -1,4 +1,4 @@
-// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
+// Copyright (c) Xenko contributors (https://xenko.com) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System;
@@ -11,6 +11,7 @@ using Stride.Core.Serialization;
 using Stride.Core.Serialization.Contents;
 using Stride.Engine;
 using Stride.Graphics;
+using Stride.Rendering.Images;
 
 namespace Stride.Rendering.Compositing
 {
@@ -23,11 +24,6 @@ namespace Stride.Rendering.Compositing
     [DataSerializerGlobal(null, typeof(FastTrackingCollection<RootRenderFeature>))]
     public class GraphicsCompositor : RendererBase
     {
-        /// <summary>
-        /// A property key to get the current graphics compositor from the <see cref="RenderContext.Tags"/>.
-        /// </summary>
-        public static readonly PropertyKey<GraphicsCompositor> Current = new PropertyKey<GraphicsCompositor>("GraphicsCompositor.Current", typeof(GraphicsCompositor));
-
         private readonly List<SceneInstance> initializedSceneInstances = new List<SceneInstance>();
 
         /// <summary>
@@ -76,6 +72,36 @@ namespace Stride.Rendering.Compositing
         /// The entry point for a compositor used by the scene editor.
         /// </summary>
         public ISceneRenderer Editor { get; set; }
+
+        /// <summary>
+        /// Shortcut to getting post processing effects
+        /// </summary>
+        [DataMemberIgnore]
+        public PostProcessingEffects PostProcessing {
+            get {
+                if (cachedProcessor == null && Game is SceneCameraRenderer) {
+                    // find it
+                    SceneCameraRenderer cgame = (SceneCameraRenderer)Game;
+                    if (cgame.Child is SceneRendererCollection) {
+                        SceneRendererCollection src = (SceneRendererCollection)cgame.Child;
+                        List<ISceneRenderer> renderers = src.Children;
+                        for (int i=0;i<renderers.Count;i++) {
+                            if (renderers[i] is ForwardRenderer) {
+                                IPostProcessingEffects check = ((ForwardRenderer)renderers[i]).PostEffects;
+                                if (check != null && check is PostProcessingEffects) {
+                                    cachedProcessor = (PostProcessingEffects)check;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                return cachedProcessor;
+            }
+        }
+
+        [DataMemberIgnore]
+        private PostProcessingEffects cachedProcessor;
 
         /// <inheritdoc/>
         protected override void InitializeCore()
@@ -144,7 +170,6 @@ namespace Stride.Rendering.Compositing
                 using (context.RenderContext.PushTagAndRestore(SceneInstance.CurrentVisibilityGroup, visibilityGroup))
                 using (context.RenderContext.PushTagAndRestore(SceneInstance.CurrentRenderSystem, RenderSystem))
                 using (context.RenderContext.PushTagAndRestore(SceneCameraSlotCollection.Current, Cameras))
-                using (context.RenderContext.PushTagAndRestore(Current, this))
                 {
                     // Set render system
                     context.RenderContext.RenderSystem = RenderSystem;
